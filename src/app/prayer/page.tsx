@@ -49,10 +49,8 @@ function formatCountdown(seconds: number): string {
 
 function calcPrayers(lat: number, lng: number, date: Date): PrayerTime[] {
   const coordinates = new adhan.Coordinates(lat, lng)
-  const params = adhan.CalculationMethod.MuslimWorldLeague()
-  if (lat > 48) {
-    params.highLatitudeRule = adhan.HighLatitudeRule.SeventhOfTheNight
-  }
+  const params = adhan.CalculationMethod.Turkey()
+  params.highLatitudeRule = adhan.HighLatitudeRule.TwilightAngle
   const pt = new adhan.PrayerTimes(coordinates, date, params)
   return PRAYER_DEFS.map((p) => {
     const d = pt[p.key as keyof adhan.PrayerTimes] as Date
