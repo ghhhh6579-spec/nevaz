@@ -76,8 +76,9 @@ export default function PrayerPage() {
       const today = new Date()
       const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
 
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
       const [timingsRes, geoRes] = await Promise.all([
-        fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=3`),
+        fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=3&timezonestring=${encodeURIComponent(tz)}`),
         fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`),
       ])
 
