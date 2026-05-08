@@ -20,19 +20,13 @@ export default function AuthPage() {
 
     try {
       if (tab === 'register') {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: name } },
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name }),
         })
-
-        if (signUpError) {
-          const isRateLimit = signUpError.message?.toLowerCase().includes('rate limit')
-          if (isRateLimit) {
-            throw new Error('Превышен лимит Supabase (3 письма/час). Подождите час или используйте другой email.')
-          }
-          throw signUpError
-        }
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error)
 
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
         if (signInError) throw signInError
