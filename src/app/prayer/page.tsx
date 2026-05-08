@@ -34,6 +34,14 @@ const PRAYER_KEYS = [
   { key: 'Isha', name: 'Иша', arabic: 'العشاء' },
 ]
 
+function parseTime(raw: string): string {
+  const match = raw.match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return '--:--'
+  const h = String(match[1]).padStart(2, '0')
+  const m = String(match[2]).padStart(2, '0')
+  return `${h}:${m}`
+}
+
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number)
   return h * 60 + m
@@ -76,9 +84,8 @@ export default function PrayerPage() {
       const today = new Date()
       const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
 
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
       const [timingsRes, geoRes] = await Promise.all([
-        fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=14&timezonestring=${encodeURIComponent(tz)}`),
+        fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=14`),
         fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`),
       ])
 
@@ -87,8 +94,6 @@ export default function PrayerPage() {
 
       const timings = timingsData.data.timings
       const hijri = timingsData.data.date.hijri
-      console.log('API URL:', `https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=14&timezonestring=${tz}`)
-      console.log('Timings from API:', { Fajr: timings.Fajr, Sunrise: timings.Sunrise, Dhuhr: timings.Dhuhr, Asr: timings.Asr, Maghrib: timings.Maghrib, Isha: timings.Isha })
 
       setHijriDate(`${hijri.day} ${hijri.month.en} ${hijri.year} г.х.`)
       setCity(
@@ -103,7 +108,7 @@ export default function PrayerPage() {
         key: p.key,
         name: p.name,
         arabic: p.arabic,
-        time: timings[p.key]?.slice(0, 5) || '--:--',
+        time: timings[p.key] ? parseTime(timings[p.key]) : '--:--',
       }))
 
       setPrayers(prayerList)
