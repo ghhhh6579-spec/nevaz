@@ -87,6 +87,8 @@ export default function PrayerPage() {
 
       const timings = timingsData.data.timings
       const hijri = timingsData.data.date.hijri
+      console.log('API URL:', `https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=14&timezonestring=${tz}`)
+      console.log('Timings from API:', { Fajr: timings.Fajr, Sunrise: timings.Sunrise, Dhuhr: timings.Dhuhr, Asr: timings.Asr, Maghrib: timings.Maghrib, Isha: timings.Isha })
 
       setHijriDate(`${hijri.day} ${hijri.month.en} ${hijri.year} г.х.`)
       setCity(
