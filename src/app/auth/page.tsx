@@ -26,9 +26,13 @@ export default function AuthPage() {
           options: { data: { full_name: name } },
         })
 
-        // "email rate limit exceeded" means account may have been created — try signing in anyway
-        const isRateLimit = signUpError?.message?.toLowerCase().includes('rate limit')
-        if (signUpError && !isRateLimit) throw signUpError
+        if (signUpError) {
+          const isRateLimit = signUpError.message?.toLowerCase().includes('rate limit')
+          if (isRateLimit) {
+            throw new Error('Превышен лимит Supabase (3 письма/час). Подождите час или используйте другой email.')
+          }
+          throw signUpError
+        }
 
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
         if (signInError) throw signInError
