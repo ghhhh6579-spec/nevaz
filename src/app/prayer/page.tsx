@@ -3,48 +3,31 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import * as adhan from 'adhan'
 
 interface PrayerTime {
   name: string
   arabic: string
   time: string
   key: string
+  date: Date
 }
 
-interface TimingsResponse {
-  data: {
-    timings: Record<string, string>
-    date: {
-      hijri: {
-        date: string
-        month: { en: string; ar: string }
-        year: string
-        day: string
-      }
-    }
-  }
-}
-
-const PRAYER_KEYS = [
-  { key: 'Fajr', name: 'Фаджр', arabic: 'الفجر' },
-  { key: 'Sunrise', name: 'Восход', arabic: 'الشروق' },
-  { key: 'Dhuhr', name: 'Зухр', arabic: 'الظهر' },
-  { key: 'Asr', name: 'Аср', arabic: 'العصر' },
-  { key: 'Maghrib', name: 'Магриб', arabic: 'المغرب' },
-  { key: 'Isha', name: 'Иша', arabic: 'العشاء' },
+const PRAYER_DEFS = [
+  { key: 'fajr',    name: 'Фаджр',  arabic: 'الفجر'  },
+  { key: 'sunrise', name: 'Восход', arabic: 'الشروق' },
+  { key: 'dhuhr',   name: 'Зухр',   arabic: 'الظهر'  },
+  { key: 'asr',     name: 'Аср',    arabic: 'العصر'  },
+  { key: 'maghrib', name: 'Магриб', arabic: 'المغرب' },
+  { key: 'isha',    name: 'Иша',    arabic: 'العشاء' },
 ]
 
-function parseTime(raw: string): string {
-  const match = raw.match(/^(\d{1,2}):(\d{2})/)
-  if (!match) return '--:--'
-  const h = String(match[1]).padStart(2, '0')
-  const m = String(match[2]).padStart(2, '0')
-  return `${h}:${m}`
+function dateToHHMM(date: Date): string {
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number)
-  return h * 60 + m
+function dateToMinutes(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes()
 }
 
 function formatCountdown(seconds: number): string {
@@ -53,6 +36,19 @@ function formatCountdown(seconds: number): string {
   const s = seconds % 60
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function calcPrayers(lat: number, lng: number, date: Date): PrayerTime[] {
+  const coordinates = new adhan.Coordinates(lat, lng)
+  const params = adhan.CalculationMethod.MuslimWorldLeague()
+  if (lat > 48) {
+    params.highLatitudeRule = adhan.HighLatitudeRule.SeventhOfTheNight
+  }
+  const pt = new adhan.PrayerTimes(coordinates, date, params)
+  return PRAYER_DEFS.map((p) => {
+    const d = pt[p.key as keyof adhan.PrayerTimes] as Date
+    return { key: p.key, name: p.name, arabic: p.arabic, time: dateToHHMM(d), date: d }
+  })
 }
 
 export default function PrayerPage() {
@@ -82,21 +78,15 @@ export default function PrayerPage() {
   const loadPrayers = useCallback(async (lat: number, lng: number) => {
     try {
       const today = new Date()
-      const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
+      const prayerList = calcPrayers(lat, lng, today)
+      setPrayers(prayerList)
 
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const [timingsRes, geoRes] = await Promise.all([
-        fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lng}&method=3&timezonestring=${encodeURIComponent(tz)}`),
+      const [geoRes, hijriRes] = await Promise.all([
         fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`),
+        fetch(`https://api.aladhan.com/v1/gToH/${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`),
       ])
 
-      const timingsData: TimingsResponse = await timingsRes.json()
       const geoData = await geoRes.json()
-
-      const timings = timingsData.data.timings
-      const hijri = timingsData.data.date.hijri
-
-      setHijriDate(`${hijri.day} ${hijri.month.en} ${hijri.year} г.х.`)
       setCity(
         geoData.address?.city ||
           geoData.address?.town ||
@@ -105,16 +95,11 @@ export default function PrayerPage() {
           'Ваш город'
       )
 
-      const prayerList: PrayerTime[] = PRAYER_KEYS.map((p) => ({
-        key: p.key,
-        name: p.name,
-        arabic: p.arabic,
-        time: timings[p.key] ? parseTime(timings[p.key]) : '--:--',
-      }))
-
-      setPrayers(prayerList)
+      const hijriData = await hijriRes.json()
+      const h = hijriData?.data?.hijri
+      if (h) setHijriDate(`${h.day} ${h.month.en} ${h.year} г.х.`)
     } catch {
-      setError('Не удалось загрузить время намазов')
+      setError('Не удалось загрузить данные')
     } finally {
       setLoading(false)
     }
@@ -143,17 +128,16 @@ export default function PrayerPage() {
   useEffect(() => {
     if (!prayers.length) return
 
-    const nowMinutes = now.getHours() * 60 + now.getMinutes()
-    const nowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+    const nowMin = now.getHours() * 60 + now.getMinutes()
+    const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
 
     let current = -1
     let next = -1
 
     for (let i = 0; i < prayers.length; i++) {
-      const pMin = timeToMinutes(prayers[i].time)
-      const nextPMin = i + 1 < prayers.length ? timeToMinutes(prayers[i + 1].time) : 24 * 60
-
-      if (nowMinutes >= pMin && nowMinutes < nextPMin) {
+      const pMin = dateToMinutes(prayers[i].date)
+      const nextPMin = i + 1 < prayers.length ? dateToMinutes(prayers[i + 1].date) : 24 * 60
+      if (nowMin >= pMin && nowMin < nextPMin) {
         current = i
         next = i + 1 < prayers.length ? i + 1 : 0
         break
@@ -169,10 +153,9 @@ export default function PrayerPage() {
     setNextIdx(next)
 
     if (next >= 0) {
-      const nextMin = timeToMinutes(prayers[next].time)
-      let nextSec = nextMin * 60
-      if (nextSec < nowSeconds) nextSec += 24 * 3600
-      setCountdown(nextSec - nowSeconds)
+      const nextSec = prayers[next].date.getHours() * 3600 + prayers[next].date.getMinutes() * 60
+      const diff = nextSec < nowSec ? nextSec + 24 * 3600 - nowSec : nextSec - nowSec
+      setCountdown(diff)
     }
   }, [now, prayers])
 
